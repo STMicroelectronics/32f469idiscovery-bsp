@@ -119,6 +119,7 @@ LTDC_HandleTypeDef  hltdc_eval;
 DSI_HandleTypeDef hdsi_eval;
 uint32_t lcd_x_size = OTM8009A_800X480_WIDTH;
 uint32_t lcd_y_size = OTM8009A_800X480_HEIGHT;
+LCD_Driver_TypeDef Lcd_Driver_Type;
 
 /**
   * @}
@@ -149,6 +150,7 @@ static void DrawChar(uint16_t Xpos, uint16_t Ypos, const uint8_t *c);
 static void FillTriangle(uint16_t x1, uint16_t x2, uint16_t x3, uint16_t y1, uint16_t y2, uint16_t y3);
 static void LL_FillBuffer(uint32_t LayerIndex, void *pDst, uint32_t xSize, uint32_t ySize, uint32_t OffLine, uint32_t ColorIndex);
 static void LL_ConvertLineToARGB8888(void * pSrc, void *pDst, uint32_t xSize, uint32_t ColorMode);
+static LCD_Driver_TypeDef LCD_ReadType(LCD_Driver_TypeDef Lcd_type);
 /**
   * @}
   */
@@ -230,7 +232,16 @@ uint8_t BSP_LCD_InitEx(LCD_OrientationTypeDef orientation)
   hdsi_eval.Init.TXEscapeCkdiv = laneByteClk_kHz/15620; 
   
   HAL_DSI_Init(&(hdsi_eval), &(dsiPllInit));
-  
+
+  /* Start DSI */
+  HAL_DSI_Start(&hdsi_eval);
+  /* Enable the DSI BTW for read operations */
+  HAL_DSI_ConfigFlowControl(&hdsi_eval, DSI_FLOW_CONTROL_BTA);
+  Lcd_Driver_Type = LCD_ReadType(Lcd_Driver_Type);
+
+  BSP_LCD_Reset();
+  HAL_DSI_Stop(&hdsi_eval);
+
   /* Timing parameters for all Video modes
   * Set Timing parameters of LTDC depending on its chosen orientation
   */
@@ -250,24 +261,26 @@ uint8_t BSP_LCD_InitEx(LCD_OrientationTypeDef orientation)
   VACT = lcd_y_size;
   
   /* The following values are same for portrait and landscape orientations */
-#if defined (USE_STM32469I_DISCO_REVC)
-  VSA  = NT35510_480X800_VSYNC;
-  VBP  = NT35510_480X800_VBP;
-  VFP  = NT35510_480X800_VFP;
-  HSA  = NT35510_480X800_HSYNC;
-  HBP  = NT35510_480X800_HBP;
-  HFP  = NT35510_480X800_HFP;
-#else
-  VSA  = OTM8009A_480X800_VSYNC;
-  VBP  = OTM8009A_480X800_VBP;
-  VFP  = OTM8009A_480X800_VFP;
-  HSA  = OTM8009A_480X800_HSYNC;
-  HBP  = OTM8009A_480X800_HBP;
-  HFP  = OTM8009A_480X800_HFP;
-#endif /* USE_STM32469I_DISCO_REVC */
-  
-  
-  hdsivideo_handle.VirtualChannelID = LCD_OTM8009A_ID;
+  if (Lcd_Driver_Type == LCD_CTRL_NT35510)
+  {
+    VSA  = NT35510_480X800_VSYNC;
+    VBP  = NT35510_480X800_VBP;
+    VFP  = NT35510_480X800_VFP;
+    HSA  = NT35510_480X800_HSYNC;
+    HBP  = NT35510_480X800_HBP;
+    HFP  = NT35510_480X800_HFP;
+  }
+  else
+  {
+    VSA  = OTM8009A_480X800_VSYNC;
+    VBP  = OTM8009A_480X800_VBP;
+    VFP  = OTM8009A_480X800_VFP;
+    HSA  = OTM8009A_480X800_HSYNC;
+    HBP  = OTM8009A_480X800_HBP;
+    HFP  = OTM8009A_480X800_HFP;
+  }
+
+  hdsivideo_handle.VirtualChannelID = LCD_Driver_ID;
   hdsivideo_handle.ColorCoding = LCD_DSI_PIXEL_DATA_FMT_RBG888;
   hdsivideo_handle.VSPolarity = DSI_VSYNC_ACTIVE_HIGH;
   hdsivideo_handle.HSPolarity = DSI_HSYNC_ACTIVE_HIGH;
@@ -318,8 +331,8 @@ uint8_t BSP_LCD_InitEx(LCD_OrientationTypeDef orientation)
   HAL_DSI_ConfigPhyTimer(&hdsi_eval, &PhyTimings);
 
 /*************************End DSI Initialization*******************************/ 
-  
-  
+
+
 /************************LTDC Initialization***********************************/  
   
   /* Timing Configuration */    
@@ -368,26 +381,31 @@ uint8_t BSP_LCD_InitEx(LCD_OrientationTypeDef orientation)
   
   /* Initialize the font */
   BSP_LCD_SetFont(&LCD_DEFAULT_FONT);
-  
-/************************End LTDC Initialization*******************************/
-  
-#if defined(USE_STM32469I_DISCO_REVC)
-/***********************NT35510 Initialization********************************/  
-  
-  /* Initialize the NT35510 LCD Display IC Driver (TechShine LCD IC Driver)
-   * depending on configuration set in 'hdsivideo_handle'.
-   */
-  NT35510_Init(NT35510_FORMAT_RGB888, orientation);
-/***********************End NT35510 Initialization****************************/
-#else
-/***********************OTM8009A Initialization********************************/  
-  
-  /* Initialize the OTM8009A LCD Display IC Driver (KoD LCD IC Driver)
-  *  depending on configuration set in 'hdsivideo_handle'.
-  */
-  OTM8009A_Init(OTM8009A_FORMAT_RGB888, orientation);
-/***********************End OTM8009A Initialization****************************/ 
-#endif /* USE_STM32469I_DISCO_REVC */
+  /************************End LTDC Initialization*******************************/
+
+  /* Checking the ID to determine the type of component */
+  if (Lcd_Driver_Type == LCD_CTRL_NT35510)
+  {
+    /***********************NT35510 Initialization********************************/  
+    /* Initialize the NT35510 LCD Display IC Driver (TechShine LCD IC Driver)
+    * depending on configuration set in 'hdsivideo_handle'.
+    */
+    NT35510_Init(NT35510_FORMAT_RGB888, orientation);
+    /***********************End NT35510 Initialization****************************/
+  }
+  else if (Lcd_Driver_Type == LCD_CTRL_OTM8009A)
+  {
+    /***********************OTM8009A Initialization********************************/  
+    /* Initialize the OTM8009A LCD Display IC Driver (KoD LCD IC Driver)
+    *  depending on configuration set in 'hdsivideo_handle'.
+    */
+    OTM8009A_Init(OTM8009A_FORMAT_RGB888, orientation);
+    /***********************End OTM8009A Initialization****************************/ 
+  }
+  else
+  {
+    return LCD_ERROR;
+  }
 
   return LCD_OK;
 }
@@ -406,29 +424,32 @@ void BSP_LCD_Reset(void)
 
   __HAL_RCC_GPIOH_CLK_ENABLE();
 
-    /* Configure the GPIO on PH7 */
-    gpio_init_structure.Pin   = GPIO_PIN_7;
-#if defined(USE_STM32469I_DISCO_REVC)
+  /* Configure the GPIO on PH7 */
+  gpio_init_structure.Pin   = GPIO_PIN_7;
+  if(Lcd_Driver_Type == LCD_CTRL_NT35510)
+  {
     /* Push Pull Mode is required for TechShine LCD (NT35510) */
     gpio_init_structure.Mode  = GPIO_MODE_OUTPUT_PP;
-#else
+  }
+  else
+  {
     gpio_init_structure.Mode  = GPIO_MODE_OUTPUT_OD;
-#endif
-    gpio_init_structure.Pull  = GPIO_NOPULL;
-    gpio_init_structure.Speed = GPIO_SPEED_HIGH;
+  }
+  gpio_init_structure.Pull  = GPIO_NOPULL;
+  gpio_init_structure.Speed = GPIO_SPEED_HIGH;
 
-    HAL_GPIO_Init(GPIOH, &gpio_init_structure);
+  HAL_GPIO_Init(GPIOH, &gpio_init_structure);
 
-    /* Activate XRES active low */
-    HAL_GPIO_WritePin(GPIOH, GPIO_PIN_7, GPIO_PIN_RESET);
+  /* Activate XRES active low */
+  HAL_GPIO_WritePin(GPIOH, GPIO_PIN_7, GPIO_PIN_RESET);
 
-    HAL_Delay(20); /* wait 20 ms */
+  HAL_Delay(20); /* wait 20 ms */
 
-    /* Deactivate XRES */
-    HAL_GPIO_WritePin(GPIOH, GPIO_PIN_7, GPIO_PIN_SET);
-    
-    /* Wait for 20ms after releasing XRES before sending commands */
-    HAL_Delay(20);    
+  /* Deactivate XRES */
+  HAL_GPIO_WritePin(GPIOH, GPIO_PIN_7, GPIO_PIN_SET);
+
+  /* Wait for 20ms after releasing XRES before sending commands */
+  HAL_Delay(20);
 #else
   /* Nothing to do in case of Disco Rev A */
 #endif /* USE_STM32469I_DISCO_REVA == 0 */
@@ -1303,12 +1324,31 @@ void DSI_IO_WriteCmd(uint32_t NbrParams, uint8_t *pParams)
 {
   if(NbrParams <= 1)
   {
-   HAL_DSI_ShortWrite(&hdsi_eval, LCD_OTM8009A_ID, DSI_DCS_SHORT_PKT_WRITE_P1, pParams[0], pParams[1]); 
+    HAL_DSI_ShortWrite(&hdsi_eval, LCD_Driver_ID, DSI_DCS_SHORT_PKT_WRITE_P1, pParams[0], pParams[1]);
   }
   else
   {
-   HAL_DSI_LongWrite(&hdsi_eval,  LCD_OTM8009A_ID, DSI_DCS_LONG_PKT_WRITE, NbrParams, pParams[NbrParams], pParams); 
+    HAL_DSI_LongWrite(&hdsi_eval,  LCD_Driver_ID, DSI_DCS_LONG_PKT_WRITE, NbrParams, pParams[NbrParams], pParams);
   }
+}
+
+/**
+  * @brief  Generic read command
+  * @param  Reg Register to be read
+  * @param  pData pointer to a buffer to store the payload of a read back operation.
+  * @param  Size  Data size to be read (in byte).
+  * @retval BSP status
+  */
+int32_t DSI_IO_ReadCmd(uint32_t Reg, uint8_t *pData, uint32_t Size)
+{
+  int32_t ret = LCD_ERROR;
+
+  if(HAL_DSI_Read(&hdsi_eval, LCD_Driver_ID, pData, Size, DSI_DCS_SHORT_PKT_READ, Reg, pData)!= HAL_OK)
+  {
+    ret = LCD_OK;
+  }
+
+  return ret;
 }
 
 /*******************************************************************************
@@ -1630,6 +1670,36 @@ static void LL_ConvertLineToARGB8888(void *pSrc, void *pDst, uint32_t xSize, uin
       }
     }
   }
+}
+
+/**
+  * @brief  Check if the component ID is correct.
+  * @param  Lcd_type Driver Type Control NT35510 or OTM8009A
+  */
+static LCD_Driver_TypeDef LCD_ReadType(LCD_Driver_TypeDef Lcd_type)
+{
+  uint16_t read_id;
+  /* Read the NT35510 ID */
+  read_id = NT35510_ReadID();
+  if(read_id == NT35510_ID)
+  {
+    Lcd_type= LCD_CTRL_NT35510;
+  }
+  else
+  {
+    /* Read the OTM8009A ID */
+    read_id = OTM8009A_ReadID();
+    if(read_id == OTM8009A_ID)
+    {
+      Lcd_type= LCD_CTRL_OTM8009A;
+    }
+    else
+    {
+      Lcd_type= LCD_CTRL_NONE;
+    }
+  }
+
+  return Lcd_type;
 }
 
 /**
