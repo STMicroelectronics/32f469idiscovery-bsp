@@ -1343,7 +1343,7 @@ int32_t DSI_IO_ReadCmd(uint32_t Reg, uint8_t *pData, uint32_t Size)
 {
   int32_t ret = LCD_ERROR;
 
-  if(HAL_DSI_Read(&hdsi_eval, LCD_Driver_ID, pData, Size, DSI_DCS_SHORT_PKT_READ, Reg, pData)!= HAL_OK)
+  if(HAL_DSI_Read(&hdsi_eval, LCD_Driver_ID, pData, Size, DSI_DCS_SHORT_PKT_READ, Reg, pData) == HAL_OK)
   {
     ret = LCD_OK;
   }
