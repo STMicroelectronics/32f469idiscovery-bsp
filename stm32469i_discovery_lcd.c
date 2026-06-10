@@ -170,11 +170,11 @@ uint8_t BSP_LCD_Init(void)
 
 /**
   * @brief  Initializes the DSI LCD. 
-  * The ititialization is done as below:
-  *     - DSI PLL ititialization
-  *     - DSI ititialization
-  *     - LTDC ititialization
-  *     - OTM8009A LCD Display IC Driver ititialization
+    * The initialization is done as below:
+    *     - DSI PLL initialization
+    *     - DSI initialization
+    *     - LTDC initialization
+    *     - OTM8009A LCD Display IC Driver initialization
   * @retval LCD state
   */
 uint8_t BSP_LCD_InitEx(LCD_OrientationTypeDef orientation)
